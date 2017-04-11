@@ -14,7 +14,7 @@ var compileSass = require('express-compile-sass');
 var recaptchaConfig = require('config').get('recaptcha');
 var KnexSessionStore = require('connect-session-knex')(session);
 var knex = require('./libs/db').knex;
-
+var modules = require('./libs/modules');
 
 log.info('Spark is starting...');
 
@@ -22,7 +22,7 @@ log.info('Spark is starting...');
 var app = express();
 
 // Middleware registration
-app.use(favicon(__dirname + '/public/favicon.ico'));
+app.use(favicon(path.join(__dirname, '/public/favicon.ico')));
 
 // Log every HTTP request
 app.use(morganLogger('dev', {
@@ -51,9 +51,9 @@ app.use(compileSass({
     logToConsole: false // If true, will log to console.error on errors
 }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/bower_components',  express.static(path.join(__dirname, '/bower_components')));
+app.use('/bower_components', express.static(path.join(__dirname, '/bower_components')));
 
-app.use('/bower_components',  express.static(__dirname + '/bower_components'));
+modules.addPublicPaths(app);
 
 app.use(function(req, res, next) {
     res.locals.req = req;
@@ -62,10 +62,12 @@ app.use(function(req, res, next) {
 });
 
 // Passport setup
-require('./libs/passport')(passport);
+require('./modules/users/libs/passport')(passport);
 
 // using session storage in DB - allows multiple server instances + cross session support between node js apps
-var sessionStore = new KnexSessionStore({knex: knex});
+var sessionStore = new KnexSessionStore({
+    knex: knex
+});
 app.use(session({
     secret: 'SparklePoniesAreFlyingOnEsplanade',
     resave: false,
@@ -138,29 +140,51 @@ app.use(middleware.handle(i18next, {
 //});
 
 // View engine setup
-app.set('views', path.join(__dirname, 'views'));
+app.set('views', [
+    // core views
+    path.join(__dirname, 'views')
+].concat(
+    // module views
+    modules.getViewPaths()
+));
 app.set('view engine', 'jade');
 
 // user roles / permissions
-var userRole = require('./libs/user_role');
+var userRole = require('./modules/users/libs/user_role');
+
+userRole.failureHandler = function (req, res, role) {
+    if (req.url !== '/') {
+        // set 403 status for any page which failed auth except homepage
+        res.status(403);
+    }
+    res.redirect('/' + (req.params.lng || 'he') + '/login?r=' + req.url);
+};
+
 app.use(userRole.middleware());
 
 // Infrastructure Routes
 if (app.get('env') === 'development') {
     app.use('/dev', require('./routes/dev_routes'));
 }
-require('./routes/main_routes.js')(app, passport);
 
-app.use('/:lng?/admin', require('./routes/admin_routes'));
+modules.addRoutes(app, passport);
 
-// Module's Routes
+// NP
 app.use('/:lng/npo', require('./routes/npo_routes'));
 
 // API
+require('./routes/api_routes.js')(app, passport);
+
 require('./routes/api_camps_routes.js')(app, passport);
 
 // Camps
+require('./routes/api_camps_routes.js')(app, passport);
 require('./routes/camps_routes.js')(app, passport);
+
+require('./routes/api/v1/camps.js')(app) // CAMPS PUBLIC API
+
+// modules
+require('./routes/main_routes.js')(app, passport);
 
 // Mail
 var mail = require('./libs/mail');
@@ -187,7 +211,7 @@ if (app.get('env') === 'development') {
 
     app.use(function(err, req, res, next) {
         // Handle CSRF token errors
-        if (err.code == 'EBADCSRFTOKEN') {
+        if (err.code === 'EBADCSRFTOKEN') {
             res.status(403);
             res.render('pages/error', {
                 errorMessage: 'Illegal action. Your connection details has been logged.',
@@ -208,7 +232,7 @@ if (app.get('env') === 'development') {
 else {
     app.use(function(err, req, res, next) {
         // Handle CSRF token errors
-        if (err.code == 'EBADCSRFTOKEN') {
+        if (err.code === 'EBADCSRFTOKEN') {
             res.status(403);
             res.render('pages/error', {
                 errorMessage: 'Illegal action. Your connection details has been logged.',

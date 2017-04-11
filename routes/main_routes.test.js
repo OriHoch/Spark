@@ -1,10 +1,11 @@
-var should = require('chai').should(); //actually call the function
+// This is magically used in code such as user.attributes.password.length.should.be.above(20);
+var should = require('chai').should(); // eslint-disable-line no-unused-vars
+
 var app = require('../app.js');
 var request = require('supertest')(app);
-var DrupalUser = require('../models/user').DrupalUser;
-var User = require('../models/user').User;
+var DrupalUser = require('../modules/users/models/user').DrupalUser;
+var User = require('../modules/users/models/user').User;
 var knex = require('../libs/db').knex;
-var constants = require('../models/constants');
 
 describe('Main routes', function () {
     it('responds to / with redirect to hebrew', function testSlash(done) {
@@ -17,34 +18,16 @@ describe('Main routes', function () {
     it('greets in Hebrew', function testSlash(done) {
         request
             .get('/he/login')
-            .expect(/ברוכים הבאות/)
+            .expect(/כניסה למערכת/)
             .expect(200, done);
     });
 
     it('greets in English', function testSlash(done) {
         request
             .get('/en/login')
-            .expect(/Welcome to Spark/)
+            .expect(/Login/)
             .expect(200, done);
     });
-
-
-    it('shows signup form in Hebrew', function testSlash(done) {
-        request
-            .get('/he/signup')
-            .expect(/הרשמה.*סיסמה/)
-            .expect(/www\.google\.com\/recaptcha\/api\.js\?hl=he/)
-            .expect(200, done);
-    });
-
-    it('shows signup form in English', function testSlash(done) {
-        request
-            .get('/en/signup')
-            .expect(/Sign Up.*Email.*Password/)
-            .expect(/www\.google\.com\/recaptcha\/api\.js\?hl=en/)
-            .expect(200, done);
-    });
-
 
     it('returns 404 MOOP! on everything else', function testPath(done) {
         request
@@ -61,24 +44,34 @@ describe('Main routes', function () {
     });
 
     it('logs-in a drupal user', function loginDrupalUser(done) {
-        var email = 'main_routes_test@localhost';
-        var hashed_password = '$S$DX1KmzFZtwY3VOgioPlO8vqXELOs4VisHPzMQ5mP6sYI.MJpHpXs';
-        var clear_password = 'paK4AMUTopVYneHoxCni';
+        var email = 'omerpines@hotmail.com';
+        // var hashed_password = '$S$DX1KmzFZtwY3VOgioPlO8vqXELOs4VisHPzMQ5mP6sYI.MJpHpXs';
+        var clear_password = '123456';
         Promise.all([
             knex(User.prototype.tableName).where('email', email).del(),
             knex(DrupalUser.prototype.tableName).where('name', email).del()
-        ]).then(function() {
-            return DrupalUser.forge({name: email, pass: hashed_password, status: 1}).save();
-        }).then(function() {
+        ])
+        // .then(function () {
+        //     return DrupalUser.forge({
+        //         name: email,
+        //         pass: hashed_password,
+        //         status: 1
+        //     }).save();
+        // })
+        .then(function () {
             return request
                 .post('/he/login')
-                .send({email: email, password: clear_password})
+                .send({
+                    email: email,
+                    password: clear_password
+                })
                 .expect(302)
-                .expect('Location', 'home')
-            ;
-        }).then(function() {
+                .expect('Location', 'home');
+        }).then(function () {
             // spark user should be updated with email and password
-            return User.forge({email: email}).fetch().then(function (user) {
+            return User.forge({
+                email: email
+            }).fetch().then(function (user) {
                 user.attributes.password.length.should.be.above(20);
                 user.attributes.email.should.equal(email);
             });
