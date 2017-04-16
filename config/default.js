@@ -106,3 +106,14 @@ exports.profiles_api = {
     username: process.env.DRUPAL_PROFILE_API_USER || 'dummy',
     password: process.env.DRUPAL_PROFILE_API_PASSWORD || 'dummy'
 };
+
+if (process.env.NODE_ENV !== 'production') {
+    // on environments other then production - mock logins are enabled by default
+    exports.enable_mock_logins = typeof(process.env.SPARK_ENABLE_MOCK_LOGINS) === "undefined" ? true : (process.env.SPARK_ENABLE_MOCK_LOGINS === "true");
+    exports.jwt_secret = typeof(process.env.SPARK_JWT_SECRET) === "undefined" ? "VERYSECRET" : process.env.SPARK_JWT_SECRET;
+} else {
+    exports.enable_mock_logins = false;
+    exports.jwt_secret = process.env.SPARK_JWT_SECRET;
+}
+exports.jwt_refresh_interval = 60*60*24; // 24 horus
+exports.jwt_expiry_interval = 60*60*24*30; // 30 days

@@ -168,6 +168,10 @@ require('./routes/camps_routes')(app, passport);
 require('./routes/api/v1/camps')(app) // CAMPS PUBLIC API
 
 require('./routes/volunteers_routes')(app, passport);
+
+// modules
+require('./modules/routes.js')(app, passport);
+
 // Mail
 var mail = require('./libs/mail');
 mail.setup(app);

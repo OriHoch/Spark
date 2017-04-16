@@ -2,7 +2,8 @@ var LocalStrategy = require('passport-local').Strategy
 var FacebookStrategy = require('passport-facebook').Strategy
 var i18next = require('i18next')
 var User = require('../models/user').User
-var facebookConfig = require('config').get('facebook')
+var config = require('config')
+var facebookConfig = config.get('facebook')
 var constants = require('../models/constants')
 var request = require('superagent')
 var _ = require('lodash')
@@ -14,22 +15,35 @@ var _ = require('lodash')
  * @param password
  * @param done
  */
-const drupal_login = (email, password, done) =>
-  request
+const drupal_login = (email, password) => {
+  if (config.get("enable_mock_logins")) {
+      let mock_logins = require("../tests/mock_logins");
+      if (mock_logins[email]) {
+          return new Promise((resolve) => {
+              if (mock_logins[email]["password"] == password) {
+                  resolve(mock_logins[email]["drupal_user"]);
+              } else {
+                  resolve(null);
+              }
+          })
+      }
+  }
+  return request
     // .post('https://profile-test.midburn.org/api/user/login')
     .post('https://profile.midburn.org/api/user/login.json')
     .send({ 'username': email, 'password': password })
     .set('Accept', 'application/json')
     .set('Content-Type', 'application/x-www-form-urlencoded')
     .then(({ body }) => body, () => null);
+};
 
 var login = function (email, password, done) {
-  drupal_login(email, password, done).then(function (drupal_user) {
+  drupal_login(email, password).then(function (drupal_user) {
     if (drupal_user != null) {
       new User({
         email: email
       }).fetch().then(function (user) {
-        // Drupal update information. 
+        // Drupal update information.
         // @TODO: refactored this section to be on external function.
         var drupal_user_id = drupal_user.user.uid;
         var tickets = drupal_user.user.data.tickets.tickets;
@@ -270,4 +284,8 @@ module.exports = function (passport) {
 
 module.exports.sign_up = function (email, password, user, done) {
   signup(email, password, user, done)
+}
+
+module.exports.login = function(email, password, done) {
+    login(email, password, done);
 }
